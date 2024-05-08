@@ -78,7 +78,35 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 	defer p.mutex.Unlock()
 	p.initClient(ctx)
 
-	return nil, fmt.Errorf("TODO: not implemented")
+	var appendedRecords []libdns.Record
+
+	for _, r := range records {
+		zra := dnsimple.ZoneRecordAttributes{
+			ZoneID:   zone,
+			Type:     r.Type,
+			Name:     &r.Name,
+			Content:  r.Value,
+			TTL:      int(r.TTL),
+			Priority: int(r.Priority),
+		}
+		resp, err := p.client.Zones.CreateRecord(ctx, p.AccountID, zone, zra)
+		if err != nil {
+			return appendedRecords, fmt.Errorf("Failed to create record: %s, error: %v", r.Name, err.Error())
+		}
+		// See https://developer.dnsimple.com/v2/zones/records/#createZoneRecord
+		switch resp.HTTPResponse.StatusCode {
+		case http.StatusCreated:
+			r.ID = strconv.FormatInt(resp.Data.ID, 10)
+			appendedRecords = append(appendedRecords, r)
+		case http.StatusBadRequest:
+			return appendedRecords, fmt.Errorf("Received HTTP 400, could not create record: %s", r.Name)
+		case http.StatusUnauthorized:
+			return appendedRecords, fmt.Errorf("Received HTTP 401 due to authentication issues, could not create record: %s", r.Name)
+		default:
+			return appendedRecords, fmt.Errorf("Unexpected error: %s, could not create record: %s", resp.HTTPResponse.Status, r.Name)
+		}
+	}
+	return appendedRecords, nil
 }
 
 // SetRecords sets the records in the zone, either by updating existing records or creating new ones.
@@ -104,7 +132,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	for _, r := range records {
 		// If the record does not have an ID, we'll try to find it by calling the API later
 		// and extrapolating its ID based on the record name, but continue for now.
-		if r.ID == "" {
+		if r.ID == "0" || r.ID == "" {
 			noID = append(noID, r)
 			continue
 		}
@@ -124,8 +152,10 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 		case http.StatusNoContent:
 			deleted = append(deleted, r)
 		case http.StatusBadRequest:
+			fmt.Printf("Received a HTTP 400, could not delete record: %s", r.Name)
 			failed = append(failed, r)
 		case http.StatusUnauthorized:
+			fmt.Printf("Received a HTTP 401, suggesting authentication issues with the DNSimple client")
 			failed = append(failed, r)
 		default:
 			failed = append(failed, r)
@@ -156,8 +186,10 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 						case http.StatusNoContent:
 							deleted = append(deleted, r)
 						case http.StatusBadRequest:
+							fmt.Printf("Received a HTTP 400, could not delete record: %s", r.Name)
 							failed = append(failed, r)
 						case http.StatusUnauthorized:
+							fmt.Printf("Received a HTTP 401, suggesting authentication issues with the DNSimple client")
 							failed = append(failed, r)
 						default:
 							failed = append(failed, r)
@@ -165,14 +197,14 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 						break
 					}
 				}
-				fmt.Printf("Could not figure out ID for record: %s", r)
+				fmt.Printf("Could not figure out ID for record: %s", r.Name)
 				failed = append(failed, r)
 			}
 		}
 	}
 	// Print out all the records we failed to delete.
 	for _, r := range failed {
-		fmt.Printf("Failed to delete record: %s", r)
+		fmt.Printf("Failed to delete record: %s", r.Name)
 	}
 
 	return deleted, nil
