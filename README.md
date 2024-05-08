@@ -10,4 +10,4 @@ This provider expects the following configuration:
 
 - `API_ACCESS_TOKEN`: an API key to authenticate calls to the provider, see https://support.dnsimple.com/articles/api-access-token/
 - `ACCOUNT_ID` _(optional)_: identifier for the account (only needed if using a user access token), see https://developer.dnsimple.com/v2/accounts/
-- `API_URL` _(optional)_: hostname for the API to use (defaults to `api.sandbox.dnsimple.com`), see https://developer.dnsimple.com/sandbox/
+- `API_URL` _(optional)_: hostname for the API to use (defaults to `api.dnsimple.com`), see https://developer.dnsimple.com/sandbox/
