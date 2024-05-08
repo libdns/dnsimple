@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/dnsimple/dnsimple-go/dnsimple"
 	"github.com/libdns/libdns"
@@ -50,7 +51,24 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	defer p.mutex.Unlock()
 	p.initClient(ctx)
 
-	return nil, fmt.Errorf("TODO: not implemented")
+	var records []libdns.Record
+
+	resp, err := p.client.Zones.ListRecords(ctx, p.AccountID, zone, &dnsimple.ZoneRecordListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range resp.Data {
+		records = append(records, libdns.Record{
+			ID:       strconv.FormatInt(r.ID, 10),
+			Type:     r.Type,
+			Name:     r.Name,
+			Value:    r.Content,
+			TTL:      time.Duration(r.TTL),
+			Priority: uint(r.Priority),
+		})
+	}
+
+	return records, nil
 }
 
 // AppendRecords adds records to the zone. It returns the records that were added.
