@@ -2,10 +2,12 @@ module github.com/libdns/dnsimple
 
 go 1.18
 
-require github.com/libdns/libdns v0.2.2
+require (
+	github.com/dnsimple/dnsimple-go v1.7.0
+	github.com/libdns/libdns v0.2.2
+)
 
 require (
-	github.com/dnsimple/dnsimple-go v1.7.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
