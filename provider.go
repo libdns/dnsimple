@@ -80,9 +80,16 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 
 	var appendedRecords []libdns.Record
 
+	// Get the Zone ID from zone name
+	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, zone)
+	if err != nil {
+		return appendedRecords, err
+	}
+	zoneID := strconv.FormatInt(resp.Data.ID, 10)
+
 	for _, r := range records {
 		zra := dnsimple.ZoneRecordAttributes{
-			ZoneID:   zone,
+			ZoneID:   zoneID,
 			Type:     r.Type,
 			Name:     &r.Name,
 			Content:  r.Value,
@@ -116,7 +123,77 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	defer p.mutex.Unlock()
 	p.initClient(ctx)
 
-	return nil, fmt.Errorf("TODO: not implemented")
+	var setRecords []libdns.Record
+
+	existingRecords, err := p.GetRecords(ctx, zone)
+	if err != nil {
+		return nil, err
+	}
+	var recordsToCreate []libdns.Record
+	var recordsToUpdate []libdns.Record
+
+	// Figure out which records are new and need to be created, and which records exist and need to be updated
+	for _, r := range records {
+		for _, er := range existingRecords {
+			if r.Name == er.Name {
+				if r.ID == "0" || r.ID == "" {
+					r.ID = er.ID
+				}
+				recordsToUpdate = append(recordsToUpdate, r)
+				break
+			}
+		}
+		recordsToCreate = append(recordsToCreate, r)
+	}
+
+	// Create new records and append them to 'setRecords'
+	createdRecords, err := p.AppendRecords(ctx, zone, recordsToCreate)
+	if err != nil {
+		return setRecords, err
+	}
+	for _, r := range createdRecords {
+		setRecords = append(setRecords, r)
+	}
+
+	// Get the Zone ID from zone name
+	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, zone)
+	if err != nil {
+		return setRecords, err
+	}
+	zoneID := strconv.FormatInt(resp.Data.ID, 10)
+
+	// Update existing records and append them to 'SetRecords'
+	for _, r := range recordsToUpdate {
+		zra := dnsimple.ZoneRecordAttributes{
+			ZoneID:   zoneID,
+			Type:     r.Type,
+			Name:     &r.Name,
+			Content:  r.Value,
+			TTL:      int(r.TTL),
+			Priority: int(r.Priority),
+		}
+		id, err := strconv.ParseInt(r.ID, 10, 64)
+		if err != nil {
+			return setRecords, err
+		}
+		resp, err := p.client.Zones.UpdateRecord(ctx, p.AccountID, zone, id, zra)
+		if err != nil {
+			return setRecords, fmt.Errorf("Failed to update record: %s, error: %v", r.Name, err.Error())
+		}
+		// https://developer.dnsimple.com/v2/zones/records/#updateZoneRecord
+		switch resp.HTTPResponse.StatusCode {
+		case http.StatusOK:
+			r.ID = strconv.FormatInt(resp.Data.ID, 10)
+			setRecords = append(setRecords, r)
+		case http.StatusBadRequest:
+			return setRecords, fmt.Errorf("Received HTTP 400, could not update record: %s", r.Name)
+		case http.StatusUnauthorized:
+			return setRecords, fmt.Errorf("Received HTTP 401 due to authentication issues, could not update record: %s", r.Name)
+		default:
+			return setRecords, fmt.Errorf("Unexpected error: %s, could not update record: %s", resp.HTTPResponse.Status, r.Name)
+		}
+	}
+	return setRecords, nil
 }
 
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.
