@@ -3,6 +3,7 @@ package dnsimple
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 	"sync"
 	"time"
@@ -96,7 +97,85 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	defer p.mutex.Unlock()
 	p.initClient(ctx)
 
-	return nil, fmt.Errorf("TODO: not implemented")
+	var deleted []libdns.Record
+	var failed []libdns.Record
+	var noID []libdns.Record
+
+	for _, r := range records {
+		// If the record does not have an ID, we'll try to find it by calling the API later
+		// and extrapolating its ID based on the record name, but continue for now.
+		if r.ID == "" {
+			noID = append(noID, r)
+			continue
+		}
+
+		id, err := strconv.ParseInt(r.ID, 10, 64)
+		if err != nil {
+			failed = append(failed, r)
+			continue
+		}
+
+		resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, zone, id)
+		if err != nil {
+			failed = append(failed, r)
+		}
+		// See https://developer.dnsimple.com/v2/zones/records/#deleteZoneRecord for API response codes
+		switch resp.HTTPResponse.StatusCode {
+		case http.StatusNoContent:
+			deleted = append(deleted, r)
+		case http.StatusBadRequest:
+			failed = append(failed, r)
+		case http.StatusUnauthorized:
+			failed = append(failed, r)
+		default:
+			failed = append(failed, r)
+		}
+	}
+	// If we received records without an ID earlier, we're going to try and figure out the ID by calling
+	// GetRecords and comparing the record name. If we're able to find it, we'll delete it, otherwise
+	// we'll append it to our list of failed to delete records.
+	if len(noID) > 0 {
+		fetchedRecords, err := p.GetRecords(ctx, zone)
+		if err != nil {
+			fmt.Printf("Failed to populate IDs for records where one wasn't provided, err: %s", err.Error())
+		} else {
+			for _, r := range noID {
+				for _, fr := range fetchedRecords {
+					if fr.Name == r.Name {
+						id, err := strconv.ParseInt(fr.ID, 10, 64)
+						if err != nil {
+							failed = append(failed, r)
+							break // Break out of the inner loop, but we still want to try the other records
+						}
+						resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, zone, id)
+						if err != nil {
+							failed = append(failed, r)
+						}
+						// See https://developer.dnsimple.com/v2/zones/records/#deleteZoneRecord for API response codes
+						switch resp.HTTPResponse.StatusCode {
+						case http.StatusNoContent:
+							deleted = append(deleted, r)
+						case http.StatusBadRequest:
+							failed = append(failed, r)
+						case http.StatusUnauthorized:
+							failed = append(failed, r)
+						default:
+							failed = append(failed, r)
+						}
+						break
+					}
+				}
+				fmt.Printf("Could not figure out ID for record: %s", r)
+				failed = append(failed, r)
+			}
+		}
+	}
+	// Print out all the records we failed to delete.
+	for _, r := range failed {
+		fmt.Printf("Failed to delete record: %s", r)
+	}
+
+	return deleted, nil
 }
 
 // Interface guards
