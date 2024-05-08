@@ -83,7 +83,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 	// Get the Zone ID from zone name
 	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, zone)
 	if err != nil {
-		return appendedRecords, err
+		return nil, err
 	}
 	zoneID := strconv.FormatInt(resp.Data.ID, 10)
 
@@ -98,19 +98,15 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		}
 		resp, err := p.client.Zones.CreateRecord(ctx, p.AccountID, zone, zra)
 		if err != nil {
-			return appendedRecords, fmt.Errorf("Failed to create record: %s, error: %v", r.Name, err.Error())
+			return appendedRecords, err
 		}
 		// See https://developer.dnsimple.com/v2/zones/records/#createZoneRecord
 		switch resp.HTTPResponse.StatusCode {
 		case http.StatusCreated:
 			r.ID = strconv.FormatInt(resp.Data.ID, 10)
 			appendedRecords = append(appendedRecords, r)
-		case http.StatusBadRequest:
-			return appendedRecords, fmt.Errorf("Received HTTP 400, could not create record: %s", r.Name)
-		case http.StatusUnauthorized:
-			return appendedRecords, fmt.Errorf("Received HTTP 401 due to authentication issues, could not create record: %s", r.Name)
 		default:
-			return appendedRecords, fmt.Errorf("Unexpected error: %s, could not create record: %s", resp.HTTPResponse.Status, r.Name)
+			return appendedRecords, fmt.Errorf("error creating record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
 		}
 	}
 	return appendedRecords, nil
@@ -178,19 +174,15 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		}
 		resp, err := p.client.Zones.UpdateRecord(ctx, p.AccountID, zone, id, zra)
 		if err != nil {
-			return setRecords, fmt.Errorf("Failed to update record: %s, error: %v", r.Name, err.Error())
+			return setRecords, err
 		}
 		// https://developer.dnsimple.com/v2/zones/records/#updateZoneRecord
 		switch resp.HTTPResponse.StatusCode {
 		case http.StatusOK:
 			r.ID = strconv.FormatInt(resp.Data.ID, 10)
 			setRecords = append(setRecords, r)
-		case http.StatusBadRequest:
-			return setRecords, fmt.Errorf("Received HTTP 400, could not update record: %s", r.Name)
-		case http.StatusUnauthorized:
-			return setRecords, fmt.Errorf("Received HTTP 401 due to authentication issues, could not update record: %s", r.Name)
 		default:
-			return setRecords, fmt.Errorf("Unexpected error: %s, could not update record: %s", resp.HTTPResponse.Status, r.Name)
+			return setRecords, fmt.Errorf("error updating record: %s", resp.HTTPResponse.Status)
 		}
 	}
 	return setRecords, nil
@@ -203,7 +195,6 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	p.initClient(ctx)
 
 	var deleted []libdns.Record
-	var failed []libdns.Record
 	var noID []libdns.Record
 
 	for _, r := range records {
@@ -216,74 +207,57 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 
 		id, err := strconv.ParseInt(r.ID, 10, 64)
 		if err != nil {
-			failed = append(failed, r)
-			continue
+			return deleted, err
 		}
 
 		resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, zone, id)
 		if err != nil {
-			failed = append(failed, r)
+			return deleted, err
 		}
 		// See https://developer.dnsimple.com/v2/zones/records/#deleteZoneRecord for API response codes
 		switch resp.HTTPResponse.StatusCode {
 		case http.StatusNoContent:
 			deleted = append(deleted, r)
-		case http.StatusBadRequest:
-			fmt.Printf("Received a HTTP 400, could not delete record: %s", r.Name)
-			failed = append(failed, r)
-		case http.StatusUnauthorized:
-			fmt.Printf("Received a HTTP 401, suggesting authentication issues with the DNSimple client")
-			failed = append(failed, r)
 		default:
-			failed = append(failed, r)
+			return deleted, fmt.Errorf("error deleting record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
 		}
 	}
+
+	// Return early if there are no records we need to try and find IDs for
+	if len(noID) == 0 {
+		return deleted, nil
+	}
+
 	// If we received records without an ID earlier, we're going to try and figure out the ID by calling
 	// GetRecords and comparing the record name. If we're able to find it, we'll delete it, otherwise
 	// we'll append it to our list of failed to delete records.
-	if len(noID) > 0 {
-		fetchedRecords, err := p.GetRecords(ctx, zone)
-		if err != nil {
-			fmt.Printf("Failed to populate IDs for records where one wasn't provided, err: %s", err.Error())
-		} else {
-			for _, r := range noID {
-				for _, fr := range fetchedRecords {
-					if fr.Name == r.Name {
-						id, err := strconv.ParseInt(fr.ID, 10, 64)
-						if err != nil {
-							failed = append(failed, r)
-							break // Break out of the inner loop, but we still want to try the other records
-						}
-						resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, zone, id)
-						if err != nil {
-							failed = append(failed, r)
-						}
-						// See https://developer.dnsimple.com/v2/zones/records/#deleteZoneRecord for API response codes
-						switch resp.HTTPResponse.StatusCode {
-						case http.StatusNoContent:
-							deleted = append(deleted, r)
-						case http.StatusBadRequest:
-							fmt.Printf("Received a HTTP 400, could not delete record: %s", r.Name)
-							failed = append(failed, r)
-						case http.StatusUnauthorized:
-							fmt.Printf("Received a HTTP 401, suggesting authentication issues with the DNSimple client")
-							failed = append(failed, r)
-						default:
-							failed = append(failed, r)
-						}
-						break
-					}
-				}
-				fmt.Printf("Could not figure out ID for record: %s", r.Name)
-				failed = append(failed, r)
+	fetchedRecords, err := p.GetRecords(ctx, zone)
+	if err != nil {
+		return deleted, fmt.Errorf("failed to fetch records: %s", err.Error())
+	}
+	for _, r := range noID {
+		for _, fr := range fetchedRecords {
+			if r.Name != fr.Name {
+				continue
 			}
+			id, err := strconv.ParseInt(fr.ID, 10, 64)
+			if err != nil {
+				return deleted, err
+			}
+			resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, zone, id)
+			if err != nil {
+				return deleted, err
+			}
+			// See https://developer.dnsimple.com/v2/zones/records/#deleteZoneRecord for API response codes
+			switch resp.HTTPResponse.StatusCode {
+			case http.StatusNoContent:
+				deleted = append(deleted, r)
+			default:
+				return deleted, fmt.Errorf("error deleting record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
+			}
+			break
 		}
 	}
-	// Print out all the records we failed to delete.
-	for _, r := range failed {
-		fmt.Printf("Failed to delete record: %s", r.Name)
-	}
-
 	return deleted, nil
 }
 
