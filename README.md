@@ -10,7 +10,7 @@ This provider expects the following configuration:
 
 ### Required
 
-- `API_ACCESS_TOKEN`: an API key to authenticate calls to the provider, see https://support.dnsimple.com/articles/api-access-token/ (NOTE: [using an account token is recommended](https://support.dnsimple.com/articles/api-access-token/#account-tokens-vs-user-tokens))
+- `API_ACCESS_TOKEN`: an API key to authenticate calls to the provider, see [api access token documentation](https://support.dnsimple.com/articles/api-access-token/) (NOTE: [using an account token is highly recommended](https://support.dnsimple.com/articles/api-access-token/#account-tokens-vs-user-tokens))
 
 ### Optional
 
