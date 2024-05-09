@@ -8,9 +8,9 @@ This package implements the [libdns interfaces](https://github.com/libdns/libdns
 
 This provider expects the following configuration:
 
-- `API_ACCESS_TOKEN`: an API key to authenticate calls to the provider, see https://support.dnsimple.com/articles/api-access-token/
+- `API_ACCESS_TOKEN`: an API key to authenticate calls to the provider, see https://support.dnsimple.com/articles/api-access-token/ (NOTE: [using an account token is recommended](https://support.dnsimple.com/articles/api-access-token/#account-tokens-vs-user-tokens))
 - `ACCOUNT_ID` _(optional)_: identifier for the account (only needed if using a user access token), see https://developer.dnsimple.com/v2/accounts/
-- `API_URL` _(optional)_: hostname for the API to use (defaults to `api.dnsimple.com`), see https://developer.dnsimple.com/sandbox/
+- `API_URL` _(optional)_: hostname for the API to use (defaults to `api.dnsimple.com`), only useful for testing purposes, see https://developer.dnsimple.com/sandbox/
 
 ## License
 
