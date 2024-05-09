@@ -59,14 +59,15 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 		return nil, err
 	}
 	for _, r := range resp.Data {
-		records = append(records, libdns.Record{
+		record := libdns.Record{
 			ID:       strconv.FormatInt(r.ID, 10),
 			Type:     r.Type,
 			Name:     r.Name,
 			Value:    r.Content,
 			TTL:      time.Duration(r.TTL),
 			Priority: uint(r.Priority),
-		})
+		}
+		records = append(records, record)
 	}
 
 	return records, nil
@@ -88,7 +89,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 	zoneID := strconv.FormatInt(resp.Data.ID, 10)
 
 	for _, r := range records {
-		zra := dnsimple.ZoneRecordAttributes{
+		attrs := dnsimple.ZoneRecordAttributes{
 			ZoneID:   zoneID,
 			Type:     r.Type,
 			Name:     &r.Name,
@@ -96,17 +97,16 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 			TTL:      int(r.TTL),
 			Priority: int(r.Priority),
 		}
-		resp, err := p.client.Zones.CreateRecord(ctx, p.AccountID, zone, zra)
+		resp, err := p.client.Zones.CreateRecord(ctx, p.AccountID, zone, attrs)
 		if err != nil {
-			return appendedRecords, err
+			return nil, err
 		}
 		// See https://developer.dnsimple.com/v2/zones/records/#createZoneRecord
-		switch resp.HTTPResponse.StatusCode {
-		case http.StatusCreated:
+		if resp.HTTPResponse.StatusCode == http.StatusCreated {
 			r.ID = strconv.FormatInt(resp.Data.ID, 10)
 			appendedRecords = append(appendedRecords, r)
-		default:
-			return appendedRecords, fmt.Errorf("error creating record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
+		} else {
+			return nil, fmt.Errorf("error creating record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
 		}
 	}
 	return appendedRecords, nil
@@ -131,13 +131,14 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	// Figure out which records are new and need to be created, and which records exist and need to be updated
 	for _, r := range records {
 		for _, er := range existingRecords {
-			if r.Name == er.Name {
-				if r.ID == "0" || r.ID == "" {
-					r.ID = er.ID
-				}
-				recordsToUpdate = append(recordsToUpdate, r)
-				break
+			if r.Name != er.Name {
+				continue
 			}
+			if r.ID == "0" || r.ID == "" {
+				r.ID = er.ID
+			}
+			recordsToUpdate = append(recordsToUpdate, r)
+			break
 		}
 		recordsToCreate = append(recordsToCreate, r)
 	}
@@ -145,7 +146,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	// Create new records and append them to 'setRecords'
 	createdRecords, err := p.AppendRecords(ctx, zone, recordsToCreate)
 	if err != nil {
-		return setRecords, err
+		return nil, err
 	}
 	for _, r := range createdRecords {
 		setRecords = append(setRecords, r)
@@ -154,13 +155,13 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	// Get the Zone ID from zone name
 	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, zone)
 	if err != nil {
-		return setRecords, err
+		return nil, err
 	}
 	zoneID := strconv.FormatInt(resp.Data.ID, 10)
 
 	// Update existing records and append them to 'SetRecords'
 	for _, r := range recordsToUpdate {
-		zra := dnsimple.ZoneRecordAttributes{
+		attrs := dnsimple.ZoneRecordAttributes{
 			ZoneID:   zoneID,
 			Type:     r.Type,
 			Name:     &r.Name,
@@ -170,19 +171,18 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		}
 		id, err := strconv.ParseInt(r.ID, 10, 64)
 		if err != nil {
-			return setRecords, err
+			return nil, err
 		}
-		resp, err := p.client.Zones.UpdateRecord(ctx, p.AccountID, zone, id, zra)
+		resp, err := p.client.Zones.UpdateRecord(ctx, p.AccountID, zone, id, attrs)
 		if err != nil {
-			return setRecords, err
+			return nil, err
 		}
 		// https://developer.dnsimple.com/v2/zones/records/#updateZoneRecord
-		switch resp.HTTPResponse.StatusCode {
-		case http.StatusOK:
+		if resp.HTTPResponse.StatusCode == http.StatusOK {
 			r.ID = strconv.FormatInt(resp.Data.ID, 10)
 			setRecords = append(setRecords, r)
-		default:
-			return setRecords, fmt.Errorf("error updating record: %s", resp.HTTPResponse.Status)
+		} else {
+			return nil, fmt.Errorf("error updating record: %s", resp.HTTPResponse.Status)
 		}
 	}
 	return setRecords, nil
@@ -215,11 +215,10 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 			return deleted, err
 		}
 		// See https://developer.dnsimple.com/v2/zones/records/#deleteZoneRecord for API response codes
-		switch resp.HTTPResponse.StatusCode {
-		case http.StatusNoContent:
+		if resp.HTTPResponse.StatusCode == http.StatusNoContent {
 			deleted = append(deleted, r)
-		default:
-			return deleted, fmt.Errorf("error deleting record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
+		} else {
+			return nil, fmt.Errorf("error deleting record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
 		}
 	}
 
@@ -233,7 +232,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	// we'll append it to our list of failed to delete records.
 	fetchedRecords, err := p.GetRecords(ctx, zone)
 	if err != nil {
-		return deleted, fmt.Errorf("failed to fetch records: %s", err.Error())
+		return nil, fmt.Errorf("failed to fetch records: %s", err.Error())
 	}
 	for _, r := range noID {
 		for _, fr := range fetchedRecords {
@@ -242,18 +241,17 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 			}
 			id, err := strconv.ParseInt(fr.ID, 10, 64)
 			if err != nil {
-				return deleted, err
+				return nil, err
 			}
 			resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, zone, id)
 			if err != nil {
-				return deleted, err
+				return nil, err
 			}
 			// See https://developer.dnsimple.com/v2/zones/records/#deleteZoneRecord for API response codes
-			switch resp.HTTPResponse.StatusCode {
-			case http.StatusNoContent:
+			if resp.HTTPResponse.StatusCode == http.StatusNoContent {
 				deleted = append(deleted, r)
-			default:
-				return deleted, fmt.Errorf("error deleting record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
+			} else {
+				return nil, fmt.Errorf("error deleting record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
 			}
 			break
 		}
