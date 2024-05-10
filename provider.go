@@ -125,11 +125,10 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	if err != nil {
 		return nil, err
 	}
-	var recordsToCreate []libdns.Record
 	var recordsToUpdate []libdns.Record
 
-	// Figure out which records are new and need to be created, and which records exist and need to be updated
-	for _, r := range records {
+	// Figure out which records exist and need to be updated
+	for i, r := range records {
 		for _, er := range existingRecords {
 			if r.Name != er.Name {
 				continue
@@ -138,13 +137,15 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 				r.ID = er.ID
 			}
 			recordsToUpdate = append(recordsToUpdate, r)
-			break
+			// If this is a record that exists and will be updated, remove it from
+			// the records slice, so everything left will be a record that does not
+			// exist and needs to be created.
+			records = append(records[:i], records[i+1:]...)
 		}
-		recordsToCreate = append(recordsToCreate, r)
 	}
 
 	// Create new records and append them to 'setRecords'
-	createdRecords, err := p.AppendRecords(ctx, zone, recordsToCreate)
+	createdRecords, err := p.AppendRecords(ctx, zone, records)
 	if err != nil {
 		return nil, err
 	}
