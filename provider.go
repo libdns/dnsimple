@@ -54,7 +54,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 
 	var records []libdns.Record
 
-	resp, err := p.client.Zones.ListRecords(ctx, p.AccountID, zone, &dnsimple.ZoneRecordListOptions{})
+	resp, err := p.client.Zones.ListRecords(ctx, p.AccountID, unFQDN(zone), &dnsimple.ZoneRecordListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 	var appendedRecords []libdns.Record
 
 	// Get the Zone ID from zone name
-	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, zone)
+	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, unFQDN(zone))
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 			TTL:      int(r.TTL),
 			Priority: int(r.Priority),
 		}
-		resp, err := p.client.Zones.CreateRecord(ctx, p.AccountID, zone, attrs)
+		resp, err := p.client.Zones.CreateRecord(ctx, p.AccountID, unFQDN(zone), attrs)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +121,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 
 	var setRecords []libdns.Record
 
-	existingRecords, err := p.GetRecords(ctx, zone)
+	existingRecords, err := p.GetRecords(ctx, unFQDN(zone))
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	}
 
 	// Create new records and append them to 'setRecords'
-	createdRecords, err := p.AppendRecords(ctx, zone, records)
+	createdRecords, err := p.AppendRecords(ctx, unFQDN(zone), records)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	}
 
 	// Get the Zone ID from zone name
-	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, zone)
+	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, unFQDN(zone))
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		if err != nil {
 			return nil, err
 		}
-		resp, err := p.client.Zones.UpdateRecord(ctx, p.AccountID, zone, id, attrs)
+		resp, err := p.client.Zones.UpdateRecord(ctx, p.AccountID, unFQDN(zone), id, attrs)
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +211,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 			return deleted, err
 		}
 
-		resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, zone, id)
+		resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, unFQDN(zone), id)
 		if err != nil {
 			return deleted, err
 		}
@@ -231,7 +231,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	// If we received records without an ID earlier, we're going to try and figure out the ID by calling
 	// GetRecords and comparing the record name. If we're able to find it, we'll delete it, otherwise
 	// we'll append it to our list of failed to delete records.
-	fetchedRecords, err := p.GetRecords(ctx, zone)
+	fetchedRecords, err := p.GetRecords(ctx, unFQDN(zone))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch records: %s", err.Error())
 	}
@@ -244,7 +244,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 			if err != nil {
 				return nil, err
 			}
-			resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, zone, id)
+			resp, err := p.client.Zones.DeleteRecord(ctx, p.AccountID, unFQDN(zone), id)
 			if err != nil {
 				return nil, err
 			}
@@ -258,6 +258,11 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 		}
 	}
 	return deleted, nil
+}
+
+// unFQDN trims any trailing "." from fqdn. dnsimple's API does not use FQDNs.
+func unFQDN(fqdn string) string {
+	return strings.TrimSuffix(fqdn, ".")
 }
 
 // Interface guards
