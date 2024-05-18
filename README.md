@@ -17,6 +17,24 @@ This provider expects the following configuration:
 - `ACCOUNT_ID`: identifier for the account (only needed if using a user access token), see [accounts documentation](https://developer.dnsimple.com/v2/accounts/)
 - `API_URL`: hostname for the API to use (defaults to `api.dnsimple.com`), only useful for testing purposes, see [sandox documentation](https://developer.dnsimple.com/sandbox/)
 
+## Testing
+
+In order to run the tests, you need to create an account on the [DNSimple sandbox environment](https://developer.dnsimple.com/sandbox/). After setup, create a new DNS zone, and create an `API_ACCESS_TOKEN` and take note of both. You will need both these values to run tests.
+
+```
+$ TEST_ZONE=example.com TEST_API_ACCESS_TOKEN=you_api_access_token go test -v
+=== RUN   Test_AppendRecords
+--- PASS: Test_AppendRecords (1.23s)
+=== RUN   Test_DeleteRecords
+--- PASS: Test_DeleteRecords (0.59s)
+=== RUN   Test_GetRecords
+--- PASS: Test_GetRecords (0.58s)
+=== RUN   Test_SetRecords
+--- PASS: Test_SetRecords (1.14s)
+PASS
+ok  	github.com/libdns/dnsimple	3.666s
+```
+
 ## License
 
 Licensed under the Apache License, Version 2.0 (the "License");
