@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	apiAccessToken = ""
-	zone           = ""
+	apiAccessToken = os.Getenv("TEST_API_ACCESS_TOKEN")
+	zone           = os.Getenv("TEST_ZONE")
 	apiUrl         = "https://api.sandbox.dnsimple.com"
 	ttl            = time.Duration(1 * time.Hour)
 )
@@ -20,9 +20,6 @@ var (
 type testRecordsCleanup = func()
 
 func TestMain(m *testing.M) {
-	apiAccessToken = os.Getenv("TEST_API_ACCESS_TOKEN")
-	zone = os.Getenv("TEST_ZONE")
-
 	if len(apiAccessToken) == 0 || len(zone) == 0 {
 		panic("API Access Token, Zone, and Account ID must be set using environment variables")
 	}
