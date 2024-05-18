@@ -30,7 +30,7 @@ func (p *Provider) initClient(ctx context.Context) {
 	p.once.Do(func() {
 		// Create new DNSimple client using the provided access token.
 		tc := dnsimple.StaticTokenHTTPClient(ctx, p.APIAccessToken)
-		c := *dnsimple.NewClient(tc)
+		c := dnsimple.NewClient(tc)
 		// Set the API URL if using a non-default API hostname (e.g. sandbox).
 		if p.APIURL != "" {
 			c.BaseURL = p.APIURL
@@ -43,16 +43,13 @@ func (p *Provider) initClient(ctx context.Context) {
 			p.AccountID = accountID
 		}
 
-		p.client = c
+		p.client = *c
 	})
 }
 
-// GetRecords lists all the records in the zone.
-func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-	p.initClient(ctx)
-
+// Internal helper function to fetch records from the provider, note that this function assumes
+// the called is holding a lock on the mutex and has already initialized the client.
+func (p *Provider) getRecordsFromProvider(ctx context.Context, zone string) ([]libdns.Record, error) {
 	var records []libdns.Record
 
 	resp, err := p.client.Zones.ListRecords(ctx, p.AccountID, unFQDN(zone), &dnsimple.ZoneRecordListOptions{})
@@ -65,7 +62,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 			Type:     r.Type,
 			Name:     r.Name,
 			Value:    r.Content,
-			TTL:      time.Duration(r.TTL),
+			TTL:      time.Duration(r.TTL * int(time.Second)),
 			Priority: uint(r.Priority),
 		}
 		records = append(records, record)
@@ -74,13 +71,19 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	return records, nil
 }
 
-// AppendRecords adds records to the zone. It returns the records that were added.
-func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+// GetRecords lists all the records in the zone.
+func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.initClient(ctx)
 
-	var appendedRecords []libdns.Record
+	return p.getRecordsFromProvider(ctx, zone)
+}
+
+// Internal helper function that actually creates the records, does not hold a lock since the called is
+// assumed to be holding a lock on the mutex and is in charge of making sure the client is initialized.
+func (p *Provider) createRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	var createdRecords []libdns.Record
 
 	// Get the Zone ID from zone name
 	resp, err := p.client.Zones.GetZone(ctx, p.AccountID, unFQDN(zone))
@@ -95,7 +98,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 			Type:     r.Type,
 			Name:     &r.Name,
 			Content:  r.Value,
-			TTL:      int(r.TTL),
+			TTL:      int(r.TTL.Seconds()),
 			Priority: int(r.Priority),
 		}
 		resp, err := p.client.Zones.CreateRecord(ctx, p.AccountID, unFQDN(zone), attrs)
@@ -105,12 +108,56 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		// See https://developer.dnsimple.com/v2/zones/records/#createZoneRecord
 		if resp.HTTPResponse.StatusCode == http.StatusCreated {
 			r.ID = strconv.FormatInt(resp.Data.ID, 10)
-			appendedRecords = append(appendedRecords, r)
+			createdRecords = append(createdRecords, r)
 		} else {
 			return nil, fmt.Errorf("error creating record: %s, error: %s", r.Name, resp.HTTPResponse.Status)
 		}
 	}
-	return appendedRecords, nil
+	return createdRecords, nil
+}
+
+// AppendRecords adds records to the zone. It returns the records that were added.
+func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.initClient(ctx)
+
+	return p.createRecords(ctx, zone, records)
+}
+
+// Internal helper function to get the lists of records to create and update respectively
+func (p *Provider) getRecordsToCreateAndUpdate(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, []libdns.Record, error) {
+	existingRecords, err := p.getRecordsFromProvider(ctx, zone)
+	if err != nil {
+		return nil, nil, err
+	}
+	var recordsToUpdate []libdns.Record
+
+	updateMap := make(map[libdns.Record]bool)
+	var recordsToCreate []libdns.Record
+
+	// Figure out which records exist and need to be updated
+	for _, r := range records {
+		updateMap[r] = true
+		for _, er := range existingRecords {
+			if r.Name != er.Name {
+				continue
+			}
+			if r.ID == "0" || r.ID == "" {
+				r.ID = er.ID
+			}
+			recordsToUpdate = append(recordsToUpdate, r)
+			updateMap[r] = false
+		}
+	}
+	// If the record is not updating an existing record, we want to create it
+	for r, updating := range updateMap {
+		if updating {
+			recordsToCreate = append(recordsToCreate, r)
+		}
+	}
+
+	return recordsToCreate, recordsToUpdate, nil
 }
 
 // SetRecords sets the records in the zone, either by updating existing records or creating new ones.
@@ -122,31 +169,13 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 
 	var setRecords []libdns.Record
 
-	existingRecords, err := p.GetRecords(ctx, unFQDN(zone))
+	recordsToCreate, recordsToUpdate, err := p.getRecordsToCreateAndUpdate(ctx, zone, records)
 	if err != nil {
 		return nil, err
 	}
-	var recordsToUpdate []libdns.Record
-
-	// Figure out which records exist and need to be updated
-	for i, r := range records {
-		for _, er := range existingRecords {
-			if r.Name != er.Name {
-				continue
-			}
-			if r.ID == "0" || r.ID == "" {
-				r.ID = er.ID
-			}
-			recordsToUpdate = append(recordsToUpdate, r)
-			// If this is a record that exists and will be updated, remove it from
-			// the records slice, so everything left will be a record that does not
-			// exist and needs to be created.
-			records = append(records[:i], records[i+1:]...)
-		}
-	}
 
 	// Create new records and append them to 'setRecords'
-	createdRecords, err := p.AppendRecords(ctx, unFQDN(zone), records)
+	createdRecords, err := p.createRecords(ctx, zone, recordsToCreate)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +197,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 			Type:     r.Type,
 			Name:     &r.Name,
 			Content:  r.Value,
-			TTL:      int(r.TTL),
+			TTL:      int(r.TTL.Seconds()),
 			Priority: int(r.Priority),
 		}
 		id, err := strconv.ParseInt(r.ID, 10, 64)
@@ -232,12 +261,12 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	// If we received records without an ID earlier, we're going to try and figure out the ID by calling
 	// GetRecords and comparing the record name. If we're able to find it, we'll delete it, otherwise
 	// we'll append it to our list of failed to delete records.
-	fetchedRecords, err := p.GetRecords(ctx, unFQDN(zone))
+	existingRecords, err := p.getRecordsFromProvider(ctx, zone)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch records: %s", err.Error())
+		return nil, fmt.Errorf("failed to get existing records: %s", err.Error())
 	}
 	for _, r := range noID {
-		for _, fr := range fetchedRecords {
+		for _, fr := range existingRecords {
 			if r.Name != fr.Name {
 				continue
 			}
