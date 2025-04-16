@@ -31,6 +31,7 @@ func (p *Provider) initClient(ctx context.Context) {
 		// Create new DNSimple client using the provided access token.
 		tc := dnsimple.StaticTokenHTTPClient(ctx, p.APIAccessToken)
 		c := dnsimple.NewClient(tc)
+		c.UserAgent = "libdns"
 		// Set the API URL if using a non-default API hostname (e.g. sandbox).
 		if p.APIURL != "" {
 			c.BaseURL = p.APIURL
