@@ -29,21 +29,21 @@ func TestMain(m *testing.M) {
 
 func setupTestRecords(t *testing.T, ctx context.Context, p *dnsimple.Provider) ([]libdns.Record, testRecordsCleanup) {
 	testRecords := []libdns.Record{
-		{
-			Type:  "TXT",
-			Name:  "test1",
-			Value: "test1",
-			TTL:   ttl,
-		}, {
-			Type:  "TXT",
-			Name:  "test2",
-			Value: "test2",
-			TTL:   ttl,
-		}, {
-			Type:  "TXT",
-			Name:  "test3",
-			Value: "test3",
-			TTL:   ttl,
+		libdns.RR{
+			Type: "TXT",
+			Name: "test1",
+			Data: "test1",
+			TTL:  ttl,
+		}, libdns.RR{
+			Type: "TXT",
+			Name: "test2",
+			Data: "test2",
+			TTL:  ttl,
+		}, libdns.RR{
+			Type: "TXT",
+			Name: "test3",
+			Data: "test3",
+			TTL:  ttl,
 		},
 	}
 	records, err := p.AppendRecords(context.Background(), zone, testRecords)
@@ -77,38 +77,38 @@ func Test_AppendRecords(t *testing.T) {
 	}{
 		{
 			records: []libdns.Record{
-				{Type: "TXT", Name: "test_1", Value: "test_1", TTL: ttl},
-				{Type: "TXT", Name: "test_2", Value: "test_2", TTL: ttl},
-				{Type: "TXT", Name: "test_3", Value: "test_3", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_1", Data: "test_1", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_2", Data: "test_2", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_3", Data: "test_3", TTL: ttl},
 			},
 			expected: []libdns.Record{
-				{Type: "TXT", Name: "test_1", Value: "test_1", TTL: ttl},
-				{Type: "TXT", Name: "test_2", Value: "test_2", TTL: ttl},
-				{Type: "TXT", Name: "test_3", Value: "test_3", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_1", Data: "test_1", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_2", Data: "test_2", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_3", Data: "test_3", TTL: ttl},
 			},
 		},
 		{
 			records: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "123", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "123.test", Data: "123", TTL: ttl},
 			},
 			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "123", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "123.test", Data: "123", TTL: ttl},
 			},
 		},
 		{
 			records: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "123.test", Data: "test", TTL: ttl},
 			},
 			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "123.test", Data: "test", TTL: ttl},
 			},
 		},
 		{
 			records: []libdns.Record{
-				{Type: "TXT", Name: "abc.test", Value: "test", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "abc.test", Data: "test", TTL: ttl},
 			},
 			expected: []libdns.Record{
-				{Type: "TXT", Name: "abc.test", Value: "test", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "abc.test", Data: "test", TTL: ttl},
 			},
 		},
 	}
@@ -126,20 +126,17 @@ func Test_AppendRecords(t *testing.T) {
 			}
 
 			for k, r := range result {
-				if len(result[k].ID) == 0 {
-					t.Fatalf("len(result[%d].ID) == 0", k)
+				if r.RR().Type != c.expected[k].RR().Type {
+					t.Fatalf("r.Type != c.exptected[%d].Type => %s != %s", k, r.RR().Type, c.expected[k].RR().Type)
 				}
-				if r.Type != c.expected[k].Type {
-					t.Fatalf("r.Type != c.exptected[%d].Type => %s != %s", k, r.Type, c.expected[k].Type)
+				if r.RR().Name != c.expected[k].RR().Name {
+					t.Fatalf("r.Name != c.exptected[%d].Name => %s != %s", k, r.RR().Name, c.expected[k].RR().Name)
 				}
-				if r.Name != c.expected[k].Name {
-					t.Fatalf("r.Name != c.exptected[%d].Name => %s != %s", k, r.Name, c.expected[k].Name)
+				if r.RR().Data != c.expected[k].RR().Data {
+					t.Fatalf("r.Value != c.exptected[%d].Value => %s != %s", k, r.RR().Data, c.expected[k].RR().Data)
 				}
-				if r.Value != c.expected[k].Value {
-					t.Fatalf("r.Value != c.exptected[%d].Value => %s != %s", k, r.Value, c.expected[k].Value)
-				}
-				if r.TTL != c.expected[k].TTL {
-					t.Fatalf("r.TTL != c.exptected[%d].TTL => %s != %s", k, r.TTL, c.expected[k].TTL)
+				if r.RR().TTL != c.expected[k].RR().TTL {
+					t.Fatalf("r.TTL != c.exptected[%d].TTL => %s != %s", k, r.RR().TTL, c.expected[k].RR().TTL)
 				}
 			}
 		}()
@@ -168,13 +165,13 @@ func Test_DeleteRecords(t *testing.T) {
 	for _, testRecord := range testRecords {
 		var foundRecord *libdns.Record
 		for _, record := range records {
-			if testRecord.ID == record.ID {
+			if testRecord.RR().Name == record.RR().Name && testRecord.RR().Type == record.RR().Type {
 				foundRecord = &testRecord
 			}
 		}
 
 		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.ID)
+			t.Fatalf("Record not found => %s", testRecord.RR().Name)
 		}
 	}
 }
@@ -201,13 +198,13 @@ func Test_GetRecords(t *testing.T) {
 	for _, testRecord := range testRecords {
 		var foundRecord *libdns.Record
 		for _, record := range records {
-			if testRecord.ID == record.ID {
+			if testRecord.RR().Name == record.RR().Name && testRecord.RR().Type == record.RR().Type {
 				foundRecord = &testRecord
 			}
 		}
 
 		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.ID)
+			t.Fatalf("Record not found => %s", testRecord.RR().Name)
 		}
 	}
 }
@@ -222,22 +219,33 @@ func Test_SetRecords(t *testing.T) {
 	existingRecords, _ := setupTestRecords(t, ctx, p)
 
 	newTestRecords := []libdns.Record{
-		{
-			Type:  "TXT",
-			Name:  "new_test1",
-			Value: "new_test1",
-			TTL:   ttl,
+		libdns.RR{
+			Type: "A",
+			Name: "new_test1",
+			Data: "192.168.1.1",
+			TTL:  ttl,
 		},
-		{
-			Type:  "TXT",
-			Name:  "new_test2",
-			Value: "new_test2",
-			TTL:   ttl,
+		libdns.RR{
+			Type: "A",
+			Name: "new_test2",
+			Data: "192.168.1.2",
+			TTL:  ttl,
 		},
 	}
 
 	allRecords := append(existingRecords, newTestRecords...)
-	allRecords[0].Value = "new_value"
+	for i, record := range allRecords {
+		if record.RR().Type == "TXT" {
+			switch record.RR().Name {
+			case "test1":
+				allRecords[i] = libdns.RR{Type: "TXT", Name: "test1", Data: "updated_test1", TTL: ttl}
+			case "test2":
+				allRecords[i] = libdns.RR{Type: "TXT", Name: "test2", Data: "updated_test2", TTL: ttl}
+			case "test3":
+				allRecords[i] = libdns.RR{Type: "TXT", Name: "test3", Data: "updated_test3", TTL: ttl}
+			}
+		}
+	}
 
 	records, err := p.SetRecords(ctx, zone, allRecords)
 	if err != nil {
@@ -249,13 +257,46 @@ func Test_SetRecords(t *testing.T) {
 		t.Fatalf("len(records) != len(allRecords) => %d != %d", len(records), len(allRecords))
 	}
 
-	updated := false
+	expectedUpdates := map[string]string{
+		"test1": "updated_test1",
+		"test2": "updated_test2",
+		"test3": "updated_test3",
+	}
+
+	found := make(map[string]bool)
 	for _, r := range records {
-		if r.Value == "new_value" {
-			updated = true
+		for name, expectedData := range expectedUpdates {
+			if r.RR().Data == expectedData {
+				found[name] = true
+			}
 		}
 	}
-	if !updated {
-		t.Fatalf("Did not update value on existing record")
+
+	for name := range expectedUpdates {
+		if !found[name] {
+			t.Fatalf("Did not update value on existing record: %s", name)
+		}
+	}
+
+	expectedARecords := map[string]string{
+		"new_test1": "192.168.1.1",
+		"new_test2": "192.168.1.2",
+	}
+
+	foundARecords := make(map[string]bool)
+	for _, r := range records {
+		if r.RR().Type == "A" {
+			for name, expectedData := range expectedARecords {
+				if r.RR().Name == name && r.RR().Data == expectedData {
+					foundARecords[name] = true
+				}
+			}
+		}
+	}
+
+	for name := range expectedARecords {
+		if !foundARecords[name] {
+			t.Fatalf("Did not create A record: %s", name)
+		}
 	}
 }
