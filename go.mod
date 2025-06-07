@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/dnsimple/dnsimple-go/v4 v4.0.0
-	github.com/libdns/libdns v0.2.3
+	github.com/libdns/libdns v1.1.0
 )
 
 require (
