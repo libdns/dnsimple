@@ -220,27 +220,32 @@ func Test_SetRecords(t *testing.T) {
 
 	newTestRecords := []libdns.Record{
 		libdns.RR{
-			Type: "TXT",
+			Type: "A",
 			Name: "new_test1",
-			Data: "new_test1",
+			Data: "192.168.1.1",
 			TTL:  ttl,
 		},
 		libdns.RR{
-			Type: "TXT",
+			Type: "A",
 			Name: "new_test2",
-			Data: "new_test2",
+			Data: "192.168.1.2",
 			TTL:  ttl,
 		},
 	}
 
 	allRecords := append(existingRecords, newTestRecords...)
-	updatedRecord := libdns.RR{
-		Type: "TXT",
-		Name: "new_test1",
-		Data: "new_value",
-		TTL:  ttl,
+	for i, record := range allRecords {
+		if record.RR().Type == "TXT" {
+			switch record.RR().Name {
+			case "test1":
+				allRecords[i] = libdns.RR{Type: "TXT", Name: "test1", Data: "updated_test1", TTL: ttl}
+			case "test2":
+				allRecords[i] = libdns.RR{Type: "TXT", Name: "test2", Data: "updated_test2", TTL: ttl}
+			case "test3":
+				allRecords[i] = libdns.RR{Type: "TXT", Name: "test3", Data: "updated_test3", TTL: ttl}
+			}
+		}
 	}
-	allRecords[0] = updatedRecord
 
 	records, err := p.SetRecords(ctx, zone, allRecords)
 	if err != nil {
@@ -252,13 +257,46 @@ func Test_SetRecords(t *testing.T) {
 		t.Fatalf("len(records) != len(allRecords) => %d != %d", len(records), len(allRecords))
 	}
 
-	updated := false
+	expectedUpdates := map[string]string{
+		"test1": "updated_test1",
+		"test2": "updated_test2",
+		"test3": "updated_test3",
+	}
+
+	found := make(map[string]bool)
 	for _, r := range records {
-		if r.RR().Data == "new_value" {
-			updated = true
+		for name, expectedData := range expectedUpdates {
+			if r.RR().Data == expectedData {
+				found[name] = true
+			}
 		}
 	}
-	if !updated {
-		t.Fatalf("Did not update value on existing record")
+
+	for name := range expectedUpdates {
+		if !found[name] {
+			t.Fatalf("Did not update value on existing record: %s", name)
+		}
+	}
+
+	expectedARecords := map[string]string{
+		"new_test1": "192.168.1.1",
+		"new_test2": "192.168.1.2",
+	}
+
+	foundARecords := make(map[string]bool)
+	for _, r := range records {
+		if r.RR().Type == "A" {
+			for name, expectedData := range expectedARecords {
+				if r.RR().Name == name && r.RR().Data == expectedData {
+					foundARecords[name] = true
+				}
+			}
+		}
+	}
+
+	for name := range expectedARecords {
+		if !foundARecords[name] {
+			t.Fatalf("Did not create A record: %s", name)
+		}
 	}
 }
