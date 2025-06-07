@@ -29,21 +29,21 @@ func TestMain(m *testing.M) {
 
 func setupTestRecords(t *testing.T, ctx context.Context, p *dnsimple.Provider) ([]libdns.Record, testRecordsCleanup) {
 	testRecords := []libdns.Record{
-		{
-			Type:  "TXT",
-			Name:  "test1",
-			Value: "test1",
-			TTL:   ttl,
-		}, {
-			Type:  "TXT",
-			Name:  "test2",
-			Value: "test2",
-			TTL:   ttl,
-		}, {
-			Type:  "TXT",
-			Name:  "test3",
-			Value: "test3",
-			TTL:   ttl,
+		libdns.RR{
+			Type: "TXT",
+			Name: "test1",
+			Data: "test1",
+			TTL:  ttl,
+		}, libdns.RR{
+			Type: "TXT",
+			Name: "test2",
+			Data: "test2",
+			TTL:  ttl,
+		}, libdns.RR{
+			Type: "TXT",
+			Name: "test3",
+			Data: "test3",
+			TTL:  ttl,
 		},
 	}
 	records, err := p.AppendRecords(context.Background(), zone, testRecords)
@@ -77,38 +77,38 @@ func Test_AppendRecords(t *testing.T) {
 	}{
 		{
 			records: []libdns.Record{
-				{Type: "TXT", Name: "test_1", Value: "test_1", TTL: ttl},
-				{Type: "TXT", Name: "test_2", Value: "test_2", TTL: ttl},
-				{Type: "TXT", Name: "test_3", Value: "test_3", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_1", Data: "test_1", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_2", Data: "test_2", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_3", Data: "test_3", TTL: ttl},
 			},
 			expected: []libdns.Record{
-				{Type: "TXT", Name: "test_1", Value: "test_1", TTL: ttl},
-				{Type: "TXT", Name: "test_2", Value: "test_2", TTL: ttl},
-				{Type: "TXT", Name: "test_3", Value: "test_3", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_1", Data: "test_1", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_2", Data: "test_2", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "test_3", Data: "test_3", TTL: ttl},
 			},
 		},
 		{
 			records: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "123", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "123.test", Data: "123", TTL: ttl},
 			},
 			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "123", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "123.test", Data: "123", TTL: ttl},
 			},
 		},
 		{
 			records: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "123.test", Data: "test", TTL: ttl},
 			},
 			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "123.test", Data: "test", TTL: ttl},
 			},
 		},
 		{
 			records: []libdns.Record{
-				{Type: "TXT", Name: "abc.test", Value: "test", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "abc.test", Data: "test", TTL: ttl},
 			},
 			expected: []libdns.Record{
-				{Type: "TXT", Name: "abc.test", Value: "test", TTL: ttl},
+				libdns.RR{Type: "TXT", Name: "abc.test", Data: "test", TTL: ttl},
 			},
 		},
 	}
@@ -126,20 +126,17 @@ func Test_AppendRecords(t *testing.T) {
 			}
 
 			for k, r := range result {
-				if len(result[k].ID) == 0 {
-					t.Fatalf("len(result[%d].ID) == 0", k)
+				if r.RR().Type != c.expected[k].RR().Type {
+					t.Fatalf("r.Type != c.exptected[%d].Type => %s != %s", k, r.RR().Type, c.expected[k].RR().Type)
 				}
-				if r.Type != c.expected[k].Type {
-					t.Fatalf("r.Type != c.exptected[%d].Type => %s != %s", k, r.Type, c.expected[k].Type)
+				if r.RR().Name != c.expected[k].RR().Name {
+					t.Fatalf("r.Name != c.exptected[%d].Name => %s != %s", k, r.RR().Name, c.expected[k].RR().Name)
 				}
-				if r.Name != c.expected[k].Name {
-					t.Fatalf("r.Name != c.exptected[%d].Name => %s != %s", k, r.Name, c.expected[k].Name)
+				if r.RR().Data != c.expected[k].RR().Data {
+					t.Fatalf("r.Value != c.exptected[%d].Value => %s != %s", k, r.RR().Data, c.expected[k].RR().Data)
 				}
-				if r.Value != c.expected[k].Value {
-					t.Fatalf("r.Value != c.exptected[%d].Value => %s != %s", k, r.Value, c.expected[k].Value)
-				}
-				if r.TTL != c.expected[k].TTL {
-					t.Fatalf("r.TTL != c.exptected[%d].TTL => %s != %s", k, r.TTL, c.expected[k].TTL)
+				if r.RR().TTL != c.expected[k].RR().TTL {
+					t.Fatalf("r.TTL != c.exptected[%d].TTL => %s != %s", k, r.RR().TTL, c.expected[k].RR().TTL)
 				}
 			}
 		}()
@@ -168,13 +165,13 @@ func Test_DeleteRecords(t *testing.T) {
 	for _, testRecord := range testRecords {
 		var foundRecord *libdns.Record
 		for _, record := range records {
-			if testRecord.ID == record.ID {
+			if testRecord.RR().Name == record.RR().Name && testRecord.RR().Type == record.RR().Type {
 				foundRecord = &testRecord
 			}
 		}
 
 		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.ID)
+			t.Fatalf("Record not found => %s", testRecord.RR().Name)
 		}
 	}
 }
@@ -201,13 +198,13 @@ func Test_GetRecords(t *testing.T) {
 	for _, testRecord := range testRecords {
 		var foundRecord *libdns.Record
 		for _, record := range records {
-			if testRecord.ID == record.ID {
+			if testRecord.RR().Name == record.RR().Name && testRecord.RR().Type == record.RR().Type {
 				foundRecord = &testRecord
 			}
 		}
 
 		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.ID)
+			t.Fatalf("Record not found => %s", testRecord.RR().Name)
 		}
 	}
 }
@@ -222,22 +219,28 @@ func Test_SetRecords(t *testing.T) {
 	existingRecords, _ := setupTestRecords(t, ctx, p)
 
 	newTestRecords := []libdns.Record{
-		{
-			Type:  "TXT",
-			Name:  "new_test1",
-			Value: "new_test1",
-			TTL:   ttl,
+		libdns.RR{
+			Type: "TXT",
+			Name: "new_test1",
+			Data: "new_test1",
+			TTL:  ttl,
 		},
-		{
-			Type:  "TXT",
-			Name:  "new_test2",
-			Value: "new_test2",
-			TTL:   ttl,
+		libdns.RR{
+			Type: "TXT",
+			Name: "new_test2",
+			Data: "new_test2",
+			TTL:  ttl,
 		},
 	}
 
 	allRecords := append(existingRecords, newTestRecords...)
-	allRecords[0].Value = "new_value"
+	updatedRecord := libdns.RR{
+		Type: "TXT",
+		Name: "new_test1",
+		Data: "new_value",
+		TTL:  ttl,
+	}
+	allRecords[0] = updatedRecord
 
 	records, err := p.SetRecords(ctx, zone, allRecords)
 	if err != nil {
@@ -251,7 +254,7 @@ func Test_SetRecords(t *testing.T) {
 
 	updated := false
 	for _, r := range records {
-		if r.Value == "new_value" {
+		if r.RR().Data == "new_value" {
 			updated = true
 		}
 	}
