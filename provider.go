@@ -268,7 +268,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 
 	for _, r := range records {
 		rr := r.RR()
-		rid, err := p.getRecordID(ctx, zone, rr.Type, rr.Name)
+		rid, err := p.getRecordID(ctx, unFQDN(zone), rr.Type, rr.Name)
 		if err != nil {
 			return deleted, err
 		}
