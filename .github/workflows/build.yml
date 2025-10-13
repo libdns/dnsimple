@@ -1,0 +1,25 @@
+name: libdns/dnsimple
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: 'go.mod'
+        cache: true
+    - name: Build
+      run: go build -v
+    - name: Test
+      run: go test -v
+      env:
+        TEST_API_ACCESS_TOKEN: ${{ secrets.TEST_API_ACCESS_TOKEN }}
+        TEST_ZONE: ${{ secrets.TEST_ZONE }}
