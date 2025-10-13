@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dnsimple/dnsimple-go/v5/dnsimple"
+	"github.com/dnsimple/dnsimple-go/v7/dnsimple"
 	"github.com/libdns/libdns"
 )
 
